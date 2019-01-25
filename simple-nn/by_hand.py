@@ -23,15 +23,17 @@ class MLP:
 
     def forward(self, X):
         o = X
-        for i, (W, bias) in enumerate(zip(self.W, self.biases), 1):
+        for W, bias in zip(self.W[:-1], self.biases[:-1]):
             o = F.relu(torch.mm(o, W) + bias)
-        o = F.softmax(o, dim=1)
-        return o  # applies softmax
+        o = torch.mm(o, self.W[-1]) + self.biases[-1]
+        o = F.log_softmax(o, dim=1)
+        return o
 
     def forward_without_softmax(self, X):
         o = X
-        for W, bias in zip(self.W, self.biases):
+        for W, bias in zip(self.W[:-1], self.biases[:-1]):
             o = F.relu(torch.mm(o, W) + bias)
+        o = torch.mm(o, self.W[-1]) + self.biases[-1]
         return o
 
     def backward(self, yhat, y):
@@ -43,9 +45,7 @@ class MLP:
         elif y == 2:
             y_ = torch.tensor([0, 0, 1], requires_grad=True, dtype=torch.float)
 
-        EPS = 1e-15
-        yhat = yhat.view(-1) + EPS
-        loss = - torch.sum(y_ * torch.log(yhat))
+        loss = - torch.sum(y_ * yhat.view(-1))
         loss.backward()
         grads = [p.grad for p in self.parameters]
         return grads
@@ -81,15 +81,15 @@ if __name__ == '__main__':
     for y, name in class_names.items():
         data.loc[data['species'] == name, 'species'] = y
 
-    # mlp = MLP([data.shape[1] - 1, 9, 5, len(class_names)])
-    mlp_auto = MLP([data.shape[1] - 1, 30, 5, len(class_names)])
+    mlp = MLP([data.shape[1] - 1, 10, 5, len(class_names)])
+    # mlp_auto = MLP([data.shape[1] - 1, 30, 5, len(class_names)])
 
     X, Y = data.iloc[:, :-1].values, data.iloc[:, -1].values
     # convert to tensor
     X = torch.from_numpy(X).float()
     Y = torch.from_numpy(Y).long()
 
-    for epoch in range(100):
+    for epoch in range(10):
         # shuffle data
         index = torch.randperm(X.size(0))
         X = X[index]
@@ -98,19 +98,19 @@ if __name__ == '__main__':
         rights = 0
         total = X.size(0)
         for i, (x, y) in enumerate(zip(X, Y)):
-            # mlp.manual_zero_grad()
-            mlp_auto.manual_zero_grad()
+            mlp.manual_zero_grad()
+            # mlp_auto.manual_zero_grad()
 
             x = x.view(1, -1)
             y = y.view(-1)
 
-            # yhat = mlp.forward(x)
-            # grads = mlp.backward(yhat, y)
-            # mlp.update_grad(grads)
+            yhat = mlp.forward(x)
+            grads = mlp.backward(yhat, y)
+            mlp.update_grad(grads)
 
-            yhat = mlp_auto.forward_without_softmax(x)
-            auto_grads = mlp_auto.auto_backward(yhat, y)
-            mlp_auto.auto_update_grad()
+            # yhat = mlp_auto.forward_without_softmax(x)
+            # auto_grads = mlp_auto.auto_backward(yhat, y)
+            # mlp_auto.auto_update_grad()
 
             # assert [g1 == g2 for g1, g2 in zip(grads, auto_grads)]
             # assert [p1 == p2 for p1, p2 in zip(mlp.parameters, mlp_auto.parameters)]
