@@ -26,6 +26,7 @@ class MLP:
         for W, bias in zip(self.W[:-1], self.biases[:-1]):
             o = F.relu(torch.mm(o, W) + bias)
         o = torch.mm(o, self.W[-1]) + self.biases[-1]
+        # needs to use log_softmax due to numerical instability
         o = F.log_softmax(o, dim=1)
         return o
 
@@ -47,8 +48,7 @@ class MLP:
 
         loss = - torch.sum(y_ * yhat.view(-1))
         loss.backward()
-        grads = [p.grad for p in self.parameters]
-        return grads
+        return [p.grad for p in self.parameters]
 
     def auto_backward(self, yhat, y):
         loss_function = nn.CrossEntropyLoss()
