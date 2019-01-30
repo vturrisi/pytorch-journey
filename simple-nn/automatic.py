@@ -1,13 +1,15 @@
-# start hour 14:56 end hour 16:20 (22 jan)
-# start hour 13:20 - 13:35 | 15:10 (23 jan)
+import sys
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
-from itertools import chain
+import torch.optim as optim
+
+sys.path.append('.')
+from utils.load_csv_dataset import load_iris
 
 torch.manual_seed(1)
 np.random.seed(1)
@@ -26,27 +28,14 @@ class MLP(nn.Module):
     def forward(self, X):
         o = self.layers(X)
         return o
-        # return F.softmax(self.layers(X), dim=1)
 
 if __name__ == '__main__':
     # prepare csv data
-    data = pd.read_csv('../datasets/iris.csv')
-    class_names = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
-    for y, name in class_names.items():
-        data.loc[data['species'] == name, 'species'] = y
+    X, Y, class_names = load_iris()
 
     loss_function = nn.CrossEntropyLoss()
-    mlp_auto = MLP([data.shape[1] - 1, 20, 50, 20, 1000, 100, len(class_names)])
+    mlp_auto = MLP([X.size(1), 20, 50, 20, 1000, 100, len(class_names)])
     optimiser = optim.SGD(mlp_auto.parameters(), lr=0.001, momentum=0.9)
-
-    X, Y = data.iloc[:, :-1].values, data.iloc[:, -1].values
-    # convert to tensor
-    X = torch.from_numpy(X).float()
-    std = torch.std(X, 0)
-    mean = torch.mean(X, 0)
-
-    X = (X[:] - mean) / std
-    Y = torch.from_numpy(Y).long()
 
     mlp_auto.train()
     for epoch in range(10):

@@ -1,12 +1,15 @@
-# start hour 14:56 end hour 16:20 (22 jan)
-# start hour 13:20 - 13:35 | 15:10 (23 jan)
+import math
+import sys
+from itertools import chain
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from itertools import chain
+
+sys.path.append('.')
+from utils.load_csv_dataset import load_iris
 
 torch.manual_seed(1)
 np.random.seed(1)
@@ -14,8 +17,12 @@ np.random.seed(1)
 
 class MLP:
     def __init__(self, arch, learning_rate=0.01):
-        self.W = [torch.rand(inp, out, requires_grad=True)
+        # perform Xavier initialisation random from [0, 1) and divide by sqrt(input size)
+        # https://pytorch.org/docs/stable/torch.html#torch.rand
+        self.W = [torch.rand(inp, out) / math.sqrt(inp)
                   for inp, out in zip(arch[:-1], arch[1:])]
+        # turn grads on after Xavier initialisation (to not keep track of the sqrt operation)
+        [W.requires_grad_() for W in self.W]
         self.biases = [torch.zeros(i, requires_grad=True, dtype=torch.float) for i in arch[1:]]
         self.parameters = list(chain(self.W, self.biases))
 
@@ -28,7 +35,15 @@ class MLP:
         o = torch.mm(o, self.W[-1]) + self.biases[-1]
         # needs to use log_softmax due to numerical instability
         o = F.log_softmax(o, dim=1)
+        # o = self.log_softmax(o)  # manual log softmax
         return o
+
+    @staticmethod
+    def log_softmax(x):
+        # ln(e^x / (e^x + e^x+1 + e^x+2)) ->
+        #   ln(e^x) - ln(e^x + e^x+1 + e^x+2) ->
+        #   x - ln(e^x + e^x+1 + e^x+2)
+        return x - x.exp().sum(-1).log().unsqueeze(-1)
 
     def forward_without_softmax(self, X):
         o = X
@@ -46,7 +61,7 @@ class MLP:
         elif y == 2:
             y_ = torch.tensor([0, 0, 1], requires_grad=True, dtype=torch.float)
 
-        loss = - torch.sum(y_ * yhat.view(-1))
+        loss = - torch.sum(y_ * yhat.view(-1))  # manual negative likelyhood
         loss.backward()
         return [p.grad for p in self.parameters]
 
@@ -76,18 +91,10 @@ class MLP:
 
 if __name__ == '__main__':
     # prepare csv data
-    data = pd.read_csv('../datasets/iris.csv')
-    class_names = {0: 'setosa', 1: 'versicolor', 2: 'virginica'}
-    for y, name in class_names.items():
-        data.loc[data['species'] == name, 'species'] = y
+    X, Y, class_names = load_iris()
 
-    mlp = MLP([data.shape[1] - 1, 10, 5, len(class_names)])
+    mlp = MLP([X.size(1), 10, 5, len(class_names)])
     # mlp_auto = MLP([data.shape[1] - 1, 30, 5, len(class_names)])
-
-    X, Y = data.iloc[:, :-1].values, data.iloc[:, -1].values
-    # convert to tensor
-    X = torch.from_numpy(X).float()
-    Y = torch.from_numpy(Y).long()
 
     for epoch in range(10):
         # shuffle data
