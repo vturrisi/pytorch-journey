@@ -59,7 +59,7 @@ simple_cnn = simple_cnn.to(device)
 with torch.set_grad_enabled(True):
 
     simple_cnn.train()
-    for epoch in range(10):
+    for epoch in range(5):
         total_loss = 0
         corrects = 0
 
